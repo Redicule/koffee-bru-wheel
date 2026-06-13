@@ -1,0 +1,12 @@
+{
+  "name": "koffee-bru-wheel",
+  "version": "1.0.0",
+  "description": "Koffee Bru Prize Wheel - TV display + phone remote",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

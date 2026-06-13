@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Koffee Bru – Wheel of Fortune</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;600;700&display=swap');
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --olive:#4a5240; --olive-dark:#2e3328; --olive-light:#6b7260;
+    --cream:#f5f0e8; --cream-dark:#e8e0cc;
+    --gold:#c9a84c; --gold-light:#e8c96a; --bg:#1a1c18;
+  }
+  html,body { width:100%; height:100%; background:var(--bg); font-family:'Inter',sans-serif; color:var(--cream); overflow:hidden; user-select:none; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; }
+  body::before { content:''; position:fixed; inset:0; background-image:radial-gradient(circle,rgba(201,168,76,0.06) 1px,transparent 1px); background-size:40px 40px; pointer-events:none; }
+  .header { text-align:center; margin-bottom:24px; z-index:1; }
+  .brand { font-family:'Playfair Display',serif; font-size:clamp(28px,4vw,52px); font-weight:900; color:var(--gold); letter-spacing:0.04em; line-height:1; }
+  .tagline { font-size:clamp(11px,1.4vw,16px); color:var(--cream-dark); letter-spacing:0.18em; text-transform:uppercase; margin-top:6px; opacity:0.7; }
+  .wheel-area { position:relative; display:flex; align-items:center; justify-content:center; }
+  .needle { position:absolute; top:-18px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent; border-top:40px solid var(--gold); z-index:10; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
+  .needle::after { content:''; position:absolute; top:-44px; left:50%; transform:translateX(-50%); width:18px; height:18px; background:var(--gold); border-radius:50%; }
+  .wheel-glow { position:absolute; border-radius:50%; background:transparent; box-shadow:0 0 60px rgba(201,168,76,0.15),0 0 120px rgba(201,168,76,0.07); pointer-events:none; }
+  canvas#wheel { border-radius:50%; display:block; }
+  .hub { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:68px; height:68px; background:var(--bg); border:4px solid var(--gold); border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:5; }
+  .hub-inner { width:36px; height:36px; background:var(--gold); border-radius:50%; }
+  .result-overlay { position:fixed; inset:0; background:rgba(18,20,15,0.88); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; opacity:0; pointer-events:none; transition:opacity 0.4s ease; }
+  .result-overlay.show { opacity:1; pointer-events:all; }
+  .result-card { background:var(--olive-dark); border:2px solid var(--gold); border-radius:24px; padding:48px 72px; text-align:center; transform:scale(0.85); transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+  .result-overlay.show .result-card { transform:scale(1); }
+  .result-label { font-size:clamp(14px,2vw,20px); letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:16px; }
+  .result-prize { font-family:'Playfair Display',serif; font-size:clamp(36px,6vw,80px); font-weight:900; color:var(--cream); line-height:1.1; }
+  .result-subtext { margin-top:20px; font-size:clamp(13px,1.6vw,18px); color:var(--cream-dark); opacity:0.7; }
+  .status-bar { margin-top:20px; font-size:clamp(11px,1.3vw,15px); color:var(--olive-light); letter-spacing:0.06em; display:flex; align-items:center; gap:10px; z-index:1; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:#888; transition:background 0.3s; }
+  .status-dot.connected { background:#7ab648; }
+  .status-dot.spinning  { background:var(--gold); animation:pulse 0.5s infinite alternate; }
+  @keyframes pulse { from{opacity:0.5} to{opacity:1} }
+  .biltong-counter { position:fixed; bottom:24px; right:32px; font-size:13px; color:var(--olive-light); z-index:1; opacity:0.6; }
+  @keyframes tickFlash { 0%{border-top-color:var(--gold-light)} 100%{border-top-color:var(--gold)} }
+  .needle.tick { animation:tickFlash 0.06s ease; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="brand">Koffee Bru</div>
+  <div class="tagline">Spin &amp; Win</div>
+</div>
+<div class="wheel-area">
+  <div class="needle" id="needle"></div>
+  <div class="wheel-glow" id="wheelGlow"></div>
+  <canvas id="wheel"></canvas>
+  <div class="hub"><div class="hub-inner"></div></div>
+</div>
+<div class="status-bar">
+  <div class="status-dot" id="statusDot"></div>
+  <span id="statusText">Connecting...</span>
+</div>
+<div class="biltong-counter" id="biltongCounter"></div>
+<div class="result-overlay" id="resultOverlay">
+  <div class="result-card">
+    <div class="result-label" id="resultLabel">You won!</div>
+    <div class="result-prize" id="resultPrize">—</div>
+    <div class="result-subtext" id="resultSubtext"></div>
+  </div>
+</div>
+<script>
+const BASE = '';
+
+const BASE_PRIZES = [
+  { label:'Free Coffee', weight:8,  color:'#4a5240', textColor:'#f5f0e8', subtext:'Enjoy a free coffee on us!' },
+  { label:'50% Off',     weight:14, color:'#6b7260', textColor:'#f5f0e8', subtext:'50% off any coffee — use it anytime!' },
+  { label:'20% Off',     weight:22, color:'#c9a84c', textColor:'#2e3328', subtext:'20% off any coffee — use it anytime!' },
+  { label:'10% Off',     weight:28, color:'#8c9b7a', textColor:'#1a1c18', subtext:'10% off any coffee — use it anytime!' },
+  { label:'Biltong',     weight:8,  color:'#7a5c3a', textColor:'#f5f0e8', subtext:'Enjoy a bag of biltong!' },
+  { label:'Try Again',   weight:20, color:'#2e3328', textColor:'#c9a84c', subtext:'Spin again for another shot!' },
+];
+let prizes = [], biltongRemaining = 10;
+function buildPrizes() {
+  prizes = BASE_PRIZES.filter(p => !(p.label==='Biltong' && biltongRemaining<=0));
+}
+
+// ── Canvas ────────────────────────────────────────────────────────────
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+let SIZE, R, cx, cy;
+function setupCanvas() {
+  SIZE = Math.max(320, Math.min(window.innerWidth*0.72, window.innerHeight*0.72, 700));
+  canvas.width = canvas.height = SIZE;
+  document.getElementById('wheelGlow').style.cssText = `width:${SIZE+60}px;height:${SIZE+60}px`;
+  R = SIZE/2-4; cx = cy = SIZE/2;
+}
+
+function totalWeight() { return prizes.reduce((s,p)=>s+p.weight, 0); }
+
+// Draw wheel. `rotationAngle` is how much the wheel has rotated clockwise from its rest position.
+// Slices are laid out starting from the TOP (needle position = -PI/2 in canvas coords).
+function drawWheel(rotationAngle) {
+  ctx.clearRect(0,0,SIZE,SIZE);
+  const total = totalWeight();
+  // Start drawing from top (-PI/2) offset by rotation
+  let start = -Math.PI/2 + rotationAngle;
+  prizes.forEach(p => {
+    const slice = (p.weight/total)*Math.PI*2;
+    const end = start + slice;
+    const mid = start + slice/2;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,start,end); ctx.closePath();
+    ctx.fillStyle = p.color; ctx.fill();
+    ctx.strokeStyle = 'rgba(245,240,232,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(mid); ctx.textAlign = 'right'; ctx.fillStyle = p.textColor;
+    const fs = Math.max(11, Math.min(20, SIZE*0.026));
+    const words = p.label.split(' ');
+    if (words.length > 1 && p.label.length > 8) {
+      ctx.font = `700 ${fs}px Inter,sans-serif`; ctx.fillText(words[0], R*0.88, -fs*0.4);
+      ctx.font = `600 ${fs*0.85}px Inter,sans-serif`; ctx.fillText(words.slice(1).join(' '), R*0.88, fs*0.8);
+    } else {
+      ctx.font = `700 ${fs}px Inter,sans-serif`; ctx.fillText(p.label, R*0.88, fs*0.35);
+    }
+    ctx.restore();
+    start = end;
+  });
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+  ctx.strokeStyle='#c9a84c'; ctx.lineWidth=5; ctx.stroke();
+}
+
+// ── Spin logic ────────────────────────────────────────────────────────
+// The wheel is drawn starting from the top (needle). Slice 0 starts at top.
+// When rotated by `angle`, the needle points at whatever slice contains angle=0 in the rotated frame.
+// i.e. needle hits the slice whose cumulative arc covers: (totalAngle % fullCircle) from the top.
+
+let currentAngle = 0; // total clockwise rotation so far
+let spinning = false;
+let lastTickAngle = 0;
+
+function pickIndex() {
+  const total = totalWeight();
+  let r = Math.random() * total;
+  for (let i=0; i<prizes.length; i++) { r -= prizes[i].weight; if (r<=0) return i; }
+  return prizes.length - 1;
+}
+
+// Return the rotation angle so that the midpoint of slice `idx` sits under the needle (top).
+// Slice idx midpoint is at: (cumulative_weight_before + weight/2) / total * 2PI from top.
+// We want that point at angle 0 (top), so we rotate the wheel so that point comes to top.
+// rotation = fullSpins*2PI + (2PI - sliceMidAngle)  so it arrives cleanly.
+function targetRotationForIndex(idx, currentRot) {
+  const total = totalWeight();
+  let cum = 0;
+  for (let i=0; i<idx; i++) cum += prizes[i].weight;
+  const sliceMidFraction = (cum + prizes[idx].weight/2) / total;
+  const sliceMidAngle = sliceMidFraction * Math.PI * 2;
+  // How much more we need to rotate so this point reaches the top
+  const currentMod = currentRot % (Math.PI*2);
+  // Target: wheel needs to rotate so sliceMidAngle is at top
+  // i.e. currentRot + delta ≡ (2PI - sliceMidAngle) mod 2PI  ... but we want to go forward
+  let target = (Math.PI*2 - sliceMidAngle) % (Math.PI*2);
+  let delta = target - currentMod;
+  if (delta < 0) delta += Math.PI*2;
+  if (delta < 0.1) delta += Math.PI*2; // ensure at least a tiny forward movement
+  // Add full spins (6-8)
+  const fullSpins = (6 + Math.floor(Math.random()*3)) * Math.PI*2;
+  return currentRot + fullSpins + delta;
+}
+
+// After wheel stops, read which prize is under the needle
+function prizeUnderNeedle() {
+  const total = totalWeight();
+  // The wheel has rotated by currentAngle. The needle is at top.
+  // Slice 0 started at top. After rotating by currentAngle, the position under the needle
+  // corresponds to: (2PI - (currentAngle % 2PI)) % 2PI  into the slice layout.
+  const mod = ((currentAngle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+  const needlePos = (Math.PI*2 - mod) % (Math.PI*2); // position within slice layout
+  let cum = 0;
+  for (let i=0; i<prizes.length; i++) {
+    cum += (prizes[i].weight / total) * Math.PI*2;
+    if (needlePos < cum) return i;
+  }
+  return prizes.length - 1;
+}
+
+function spin() {
+  if (spinning) return;
+  spinning = true;
+  document.getElementById('statusDot').className = 'status-dot spinning';
+  document.getElementById('statusText').textContent = 'Spinning!';
+
+  const idx = pickIndex();
+  const targetAngle = targetRotationForIndex(idx, currentAngle);
+  const duration = 5500 + Math.random()*1500;
+  const startAngle = currentAngle;
+  const startTime = performance.now();
+  const needle = document.getElementById('needle');
+
+  function easeOut(t) { return 1 - Math.pow(1-t, 4); }
+
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const angle = startAngle + (targetAngle - startAngle) * easeOut(t);
+
+    // Tick on slice boundaries
+    const norm = ((angle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+    const prevNorm = ((lastTickAngle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+    const total = totalWeight(); let sa = 0;
+    prizes.forEach(p => {
+      sa += (p.weight/total)*Math.PI*2;
+      const boundary = (Math.PI*2 - sa + Math.PI*2) % (Math.PI*2);
+      const crossed = (prevNorm < boundary && norm >= boundary) ||
+                      (prevNorm > norm && (norm >= boundary || prevNorm < boundary));
+      if (crossed) { needle.classList.remove('tick'); void needle.offsetWidth; needle.classList.add('tick'); }
+    });
+    lastTickAngle = angle;
+    currentAngle = angle;
+    drawWheel(angle);
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      // Read the actual prize under the needle rather than trusting the pre-picked index
+      const actualIdx = prizeUnderNeedle();
+      spinning = false;
+      showResult(prizes[actualIdx]);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function showResult(prize) {
+  document.getElementById('resultLabel').textContent = prize.label === 'Try Again' ? 'Spin again!' : 'You won!';
+  document.getElementById('resultPrize').textContent = prize.label === 'Try Again' ? '🎰' : prize.label;
+  document.getElementById('resultSubtext').textContent = prize.subtext;
+  document.getElementById('resultOverlay').classList.add('show');
+  // Retry result post up to 5 times in case of network hiccup
+  function postResult(attempts) {
+    fetch(BASE+'/api/result', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prize: prize.label })
+    }).then(r => r.json()).then(d => {
+      console.log('[TV] Result posted:', d);
+    }).catch(e => {
+      console.log('[TV] Result post failed, attempt', attempts, e.message);
+      if (attempts < 5) setTimeout(() => postResult(attempts+1), 500);
+    });
+  }
+  postResult(1);
+  setTimeout(() => {
+    document.getElementById('resultOverlay').classList.remove('show');
+    setTimeout(() => {
+      document.getElementById('statusDot').className = 'status-dot connected';
+      document.getElementById('statusText').textContent = 'Ready – waiting for phone';
+      waitForSpin();
+    }, 600);
+  }, 4500);
+}
+
+function updateBiltong() {
+  document.getElementById('biltongCounter').textContent =
+    biltongRemaining > 0 ? `Biltong remaining: ${biltongRemaining}` : 'All biltong prizes claimed!';
+}
+
+// ── Poll for spin ─────────────────────────────────────────────────────
+let lastSeenSpinAt = 0;
+function waitForSpin() {
+  fetch(BASE + '/api/state')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('statusDot').className = 'status-dot connected';
+      document.getElementById('statusText').textContent = 'Ready – waiting for phone';
+      biltongRemaining = d.state.biltongRemaining;
+      buildPrizes(); updateBiltong();
+
+      if (lastSeenSpinAt === 0) lastSeenSpinAt = d.state.spinQueuedAt; // baseline on first load
+
+      if (d.state.spinQueuedAt > lastSeenSpinAt) {
+        lastSeenSpinAt = d.state.spinQueuedAt;
+        spin();
+      } else {
+        setTimeout(waitForSpin, 1000);
+      }
+    })
+    .catch(() => setTimeout(waitForSpin, 2000));
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+setupCanvas(); buildPrizes(); drawWheel(0); updateBiltong();
+fetch(BASE + '/api/state').then(r=>r.json()).then(d => {
+  biltongRemaining = d.state.biltongRemaining;
+  lastSeenSpinAt = d.state.spinQueuedAt;
+  buildPrizes(); updateBiltong(); drawWheel(0);
+  document.getElementById('statusDot').className = 'status-dot connected';
+  document.getElementById('statusText').textContent = 'Ready – waiting for phone';
+  waitForSpin();
+}).catch(() => setTimeout(() => location.reload(), 3000));
+
+window.addEventListener('resize', () => { setupCanvas(); drawWheel(currentAngle); });
+</script>
+</body>
+</html>
