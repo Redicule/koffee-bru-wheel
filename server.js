@@ -7,9 +7,7 @@ const PORT = process.env.PORT || 3000;
 let state = {
   biltongRemaining: 20,
   lastResult: null,
-  resultAt: 0,
-  spinQueuedAt: 0,   // timestamp of last spin request
-  spinSeenAt: 0      // timestamp the TV last acknowledged a spin
+  resultAt: 0
 };
 
 function json(res, obj, status) {
@@ -50,26 +48,17 @@ const server = http.createServer((req, res) => {
 <h1>☕ Koffee Bru – Spin & Win</h1>
 <div class="card">
   <a href="/tv" target="_blank">📺 Open TV Display</a>
-  <a href="/phone" target="_blank">📱 Open Phone Remote</a>
 </div>
 </body></html>`;
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html); return;
   }
 
-  if (url === '/tv')    { serveFile(res, 'tv.html');    return; }
-  if (url === '/phone') { serveFile(res, 'phone.html'); return; }
+  if (url === '/tv') { serveFile(res, 'tv.html'); return; }
 
   // ── API: current state ───────────────────────────────────────────────
   if (url === '/api/state') {
     json(res, { ok: true, state }); return;
-  }
-
-  // ── API: Phone triggers spin ─────────────────────────────────────────
-  if (url === '/api/spin' && req.method === 'POST') {
-    state.spinQueuedAt = Date.now();
-    console.log('[API] Spin queued at', state.spinQueuedAt);
-    json(res, { ok: true }); return;
   }
 
   // ── API: TV reports result ───────────────────────────────────────────
@@ -82,7 +71,6 @@ const server = http.createServer((req, res) => {
         if (prize === 'Biltong') state.biltongRemaining = Math.max(0, state.biltongRemaining - 1);
         state.lastResult = prize;
         state.resultAt = Date.now();
-        state.spinSeenAt = state.spinQueuedAt; // mark this spin as handled
         console.log(`[API] Result: "${prize}" — biltong left: ${state.biltongRemaining}`);
         json(res, { ok: true });
       } catch(e) {
