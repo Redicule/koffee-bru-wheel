@@ -5,7 +5,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 
 let state = {
-  biltongRemaining: 10,
+  biltongRemaining: 20,
   lastResult: null,
   resultAt: 0,
   spinQueuedAt: 0,   // timestamp of last spin request
