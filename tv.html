@@ -76,7 +76,7 @@ const BASE_PRIZES = [
   { label:'Biltong',     weight:8,  color:'#7a5c3a', textColor:'#f5f0e8', subtext:'Enjoy a bag of biltong!' },
   { label:'Try Again',   weight:20, color:'#2e3328', textColor:'#c9a84c', subtext:'Spin again for another shot!' },
 ];
-let prizes = [], biltongRemaining = 10;
+let prizes = [], biltongRemaining = 20;
 function buildPrizes() {
   prizes = BASE_PRIZES.filter(p => !(p.label==='Biltong' && biltongRemaining<=0));
 }
@@ -87,7 +87,14 @@ const ctx = canvas.getContext('2d');
 let SIZE, R, cx, cy;
 function setupCanvas() {
   SIZE = Math.max(320, Math.min(window.innerWidth*0.72, window.innerHeight*0.72, 700));
-  canvas.width = canvas.height = SIZE;
+  const dpr = window.devicePixelRatio || 1;
+  // Backing store is rendered at higher resolution for crisp text on high-density / large screens
+  canvas.width = SIZE * dpr;
+  canvas.height = SIZE * dpr;
+  // CSS size stays logical so layout doesn't change
+  canvas.style.width = SIZE + 'px';
+  canvas.style.height = SIZE + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   document.getElementById('wheelGlow').style.cssText = `width:${SIZE+60}px;height:${SIZE+60}px`;
   R = SIZE/2-4; cx = cy = SIZE/2;
 }
@@ -98,6 +105,8 @@ function totalWeight() { return prizes.reduce((s,p)=>s+p.weight, 0); }
 // Slices are laid out starting from the TOP (needle position = -PI/2 in canvas coords).
 function drawWheel(rotationAngle) {
   ctx.clearRect(0,0,SIZE,SIZE);
+  ctx.textBaseline = 'middle';
+  ctx.imageSmoothingEnabled = true;
   const total = totalWeight();
   // Start drawing from top (-PI/2) offset by rotation
   let start = -Math.PI/2 + rotationAngle;
